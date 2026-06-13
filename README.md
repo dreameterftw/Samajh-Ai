@@ -70,7 +70,53 @@ npm run build
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-> **Note:** On first use, click "Download AI Model" to download the Gemma 2B model (~900MB). This is a one-time download and enables fully offline AI inference.
+> **Note:** Always test in **Chrome** — it has the best WebAssembly and WebLLM support. On first use, click "Download AI Model" to download the Gemma 2B model (~900MB). This is a one-time download and enables fully offline AI inference.
+
+---
+
+## Testing Checklist
+
+After starting the dev server, go through this top to bottom:
+
+- [ ] Landing page loads
+- [ ] "Download AI model" prompt appears
+- [ ] Click download — progress bar moves *(takes 5–10 min first time on WiFi)*
+- [ ] Upload a photo of any document (even a printed bill works)
+- [ ] OCR progress bar fills
+- [ ] Result screen shows: what it is, amount, deadline, actions
+- [ ] Switch language to English — re-scan same doc
+- [ ] Audio button reads the result aloud
+- [ ] History shows the saved scan
+- [ ] Close browser → reopen → History still shows *(IndexedDB persisted)*
+- [ ] Turn off WiFi → scan another doc → still works *(model cached)*
+
+**Best documents to test with:**
+- Print and photograph an electricity bill
+- A bank statement PDF
+- Any letter with a date and amount in it
+
+---
+
+## Build for Production
+
+```bash
+npm run build
+```
+
+This creates a `dist/` folder — your entire app as static files, deployable anywhere.
+
+---
+
+## Deploy Free on Cloudflare Pages
+
+1. Push your code to a public GitHub repo
+2. Go to [pages.cloudflare.com](https://pages.cloudflare.com)
+3. Connect your GitHub repo
+4. Set build command: `npm run build`
+5. Set output directory: `dist`
+6. Click **Deploy**
+
+Every `git push` auto-deploys after this.
 
 ---
 
