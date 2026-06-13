@@ -32,7 +32,7 @@ function CheckIcon({ size = 14 }) {
 /* ════════════════════════════════════════
    TOP NAVBAR (shared across the app page)
 ════════════════════════════════════════ */
-function AppNavbar({ language, setLanguage, onAIClick, historyCount }) {
+function AppNavbar({ language, setLanguage, onAIClick, historyCount, onViewDoc }) {
   return (
     <nav style={{
       position: 'sticky', top: 0, zIndex: 100,
@@ -78,7 +78,7 @@ function AppNavbar({ language, setLanguage, onAIClick, historyCount }) {
         {/* Right actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {historyCount > 0 && (
-            <HistoryDropdown />
+            <HistoryDropdown onViewDoc={onViewDoc} />
           )}
           <button
             onClick={onAIClick}
@@ -99,9 +99,14 @@ function AppNavbar({ language, setLanguage, onAIClick, historyCount }) {
 /* ════════════════════════════════════════
    HISTORY DROPDOWN
 ════════════════════════════════════════ */
-function HistoryDropdown() {
+function HistoryDropdown({ onViewDoc }) {
   const [open, setOpen] = useState(false)
   const { history, removeFromHistory } = useDocument()
+
+  function handleClick(doc) {
+    setOpen(false)
+    onViewDoc(doc)
+  }
 
   return (
     <div style={{ position: 'relative' }}>
@@ -123,11 +128,11 @@ function HistoryDropdown() {
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 90 }} />
-          <div className="card-lg" style={{ position: 'absolute', top: '110%', right: 0, width: 280, zIndex: 100, overflow: 'hidden' }}>
+          <div className="card-lg" style={{ position: 'absolute', top: '110%', right: 0, width: 290, zIndex: 100, overflow: 'hidden' }}>
             <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid var(--border-soft)' }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-muted)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Recent Scans</span>
             </div>
-            <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+            <div style={{ maxHeight: 320, overflowY: 'auto' }}>
               {history.length === 0 ? (
                 <p style={{ padding: '1rem', fontSize: 13, color: 'var(--ink-muted)', textAlign: 'center' }}>No documents yet</p>
               ) : (
@@ -135,11 +140,17 @@ function HistoryDropdown() {
                   const label = DOC_TYPE_LABELS[doc.docType] ?? 'Document'
                   const risk = getRiskLevel(doc.redFlags, doc.result?.actions)
                   return (
-                    <div key={doc.id} style={{
-                      padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10,
-                      borderBottom: '1px solid var(--border-soft)',
-                      transition: 'background 0.15s', cursor: 'default',
-                    }}
+                    <button
+                      key={doc.id}
+                      onClick={() => handleClick(doc)}
+                      style={{
+                        width: '100%', padding: '10px 14px',
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        borderBottom: '1px solid var(--border-soft)',
+                        background: 'transparent', border: 'none',
+                        cursor: 'pointer', textAlign: 'left',
+                        transition: 'background 0.15s',
+                      }}
                       onMouseEnter={e => e.currentTarget.style.background = 'var(--bg)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
@@ -150,10 +161,10 @@ function HistoryDropdown() {
                         <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
                         <div style={{ fontSize: 11, color: 'var(--ink-muted)' }}>{formatDate(doc.date)}</div>
                       </div>
-                      <div className={`badge badge-${risk === 'urgent' ? 'danger' : risk === 'attention' ? 'warn' : 'safe'}`} style={{ fontSize: 10 }}>
+                      <div className={`badge badge-${risk === 'urgent' ? 'danger' : risk === 'attention' ? 'warn' : 'safe'}`} style={{ fontSize: 10, flexShrink: 0 }}>
                         {getRiskLabel(risk)}
                       </div>
-                    </div>
+                    </button>
                   )
                 })
               )}
@@ -826,11 +837,195 @@ function AIChatPanel({ open, onClose }) {
 }
 
 /* ════════════════════════════════════════
+   HISTORY RESULT VIEW — shows a saved doc
+════════════════════════════════════════ */
+function HistoryResultView({ doc, onBack }) {
+  const { langConfig } = useDocument()
+  const { speak, speaking, supported } = useSpeech()
+  const [checkState, setCheckState] = useState({})
+  const [showDoc, setShowDoc] = useState(false)
+
+  const { result, redFlags, docType, image, ocrText } = doc
+  if (!result) return (
+    <div style={{ maxWidth: 480, margin: '4rem auto', textAlign: 'center', padding: '0 1.5rem' }}>
+      <p style={{ color: 'var(--ink-muted)', marginBottom: '1rem' }}>No details available for this document.</p>
+      <button onClick={onBack} className="btn btn-secondary">← Back</button>
+    </div>
+  )
+
+  const docTypeLabel = DOC_TYPE_LABELS[docType] ?? 'Government Document'
+  const risk = getRiskLevel(redFlags, result.actions)
+  const riskBadge = risk === 'urgent'
+    ? { cls: 'badge-danger', label: '🔴 Urgent' }
+    : risk === 'attention'
+    ? { cls: 'badge-warn', label: '🟡 Attention Needed' }
+    : { cls: 'badge-safe', label: '🟢 Safe' }
+
+  const audioText = [
+    result.what, result.summary,
+    result.actions?.map(a => `${a.task}${a.deadline ? '. By ' + a.deadline : ''}`).join('. '),
+    result.consequence,
+  ].filter(Boolean).join('. ')
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      style={{ maxWidth: 780, margin: '0 auto', padding: '2.5rem 1.5rem 4rem' }}
+    >
+      {/* Top bar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: 10 }}>
+        <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: 'var(--brand-soft)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10 4L6 8l4 4" />
+          </svg>
+          Back
+        </button>
+        {supported && (
+          <button
+            onClick={() => speak(audioText, langConfig)}
+            className={`btn btn-sm ${speaking ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ gap: 6 }}
+          >
+            {speaking ? (
+              <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>Stop</>
+            ) : (
+              <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>Read Aloud</>
+            )}
+          </button>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+        {/* Summary card */}
+        <div className="card-lg" style={{ padding: 'clamp(1.25rem, 3vw, 2rem)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1rem', flexWrap: 'wrap' }}>
+            <span className="t-label">{docTypeLabel}</span>
+            <span className={`badge ${riskBadge.cls}`}>{riskBadge.label}</span>
+            <span style={{ fontSize: 11, color: 'var(--ink-muted)', marginLeft: 'auto' }}>{formatDate(doc.date)}</span>
+          </div>
+          <h2 style={{ fontSize: 'clamp(1.1rem, 3vw, 1.5rem)', fontWeight: 700, color: 'var(--brand)', lineHeight: 1.2, marginBottom: '1.25rem' }}>
+            {result.what}
+          </h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12 }}>
+            {result.amount_due && (
+              <div style={{ background: 'var(--bg)', borderRadius: 'var(--r-lg)', padding: '1rem' }}>
+                <p className="t-caption" style={{ marginBottom: 4 }}>Amount Due</p>
+                <p style={{ fontSize: 20, fontWeight: 800, color: 'var(--brand)' }}>{result.amount_due}</p>
+              </div>
+            )}
+            {result.deadline && (
+              <div style={{ background: 'var(--bg)', borderRadius: 'var(--r-lg)', padding: '1rem' }}>
+                <p className="t-caption" style={{ marginBottom: 4 }}>Pay Before</p>
+                <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand)' }}>{result.deadline}</p>
+              </div>
+            )}
+            {result.from_whom && (
+              <div style={{ background: 'var(--bg)', borderRadius: 'var(--r-lg)', padding: '1rem' }}>
+                <p className="t-caption" style={{ marginBottom: 4 }}>Issued By</p>
+                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.35 }}>{result.from_whom}</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* What this means */}
+        <div className="card-lg" style={{ padding: '1.5rem' }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink)', marginBottom: '0.75rem' }}>What This Means</h3>
+          <p style={{ fontSize: 15, color: 'var(--ink-secondary)', lineHeight: 1.75 }}>
+            <AnnotatedText text={result.summary} />
+          </p>
+        </div>
+
+        {/* Action checklist */}
+        {result.actions?.length > 0 && (
+          <div className="card-lg" style={{ padding: '1.5rem' }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink)', marginBottom: '1rem' }}>
+              Action Checklist
+              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink-muted)', marginLeft: 8 }}>({result.actions.length} items)</span>
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {result.actions.map((action, i) => {
+                const urg = action.urgency ?? 'low'
+                const cls = urg === 'high' ? 'urgent' : urg === 'medium' ? 'medium' : 'low'
+                return (
+                  <label key={i} className={`action-item ${cls}`} style={{ cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={!!checkState[i]}
+                      onChange={() => setCheckState(prev => ({ ...prev, [i]: !prev[i] }))}
+                      style={{ width: 17, height: 17, accentColor: 'var(--brand)', marginTop: 2, flexShrink: 0, cursor: 'pointer' }}
+                    />
+                    <div>
+                      <p style={{ fontSize: 14, lineHeight: 1.5, color: checkState[i] ? 'var(--ink-muted)' : 'var(--ink)', textDecoration: checkState[i] ? 'line-through' : 'none', fontWeight: 500 }}>
+                        {action.task}
+                      </p>
+                      {action.deadline && <p style={{ fontSize: 12, color: 'var(--ink-muted)', marginTop: 3 }}>By {action.deadline}</p>}
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Risk alerts */}
+        {(redFlags?.length > 0 || result.consequence) && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {redFlags?.length > 0 && (
+              <div className="card-lg" style={{ padding: '1.5rem', borderLeft: '4px solid var(--danger)' }}>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--danger)', marginBottom: '0.75rem' }}>⚠️ Potential Issues Detected</h3>
+                <ul style={{ display: 'flex', flexDirection: 'column', gap: 8, listStyle: 'none' }}>
+                  {redFlags.map(flag => (
+                    <li key={flag.id} style={{ fontSize: 14, color: 'var(--ink)', lineHeight: 1.55 }}>{flag.message ?? flag.id}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {result.consequence && (
+              <div className="card-lg" style={{ padding: '1.5rem', borderLeft: '4px solid var(--warn)' }}>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--warn)', marginBottom: '0.75rem' }}>If Ignored</h3>
+                <p style={{ fontSize: 14, color: 'var(--ink-secondary)', lineHeight: 1.65 }}>{result.consequence}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Original document */}
+        {(image || ocrText) && (
+          <div className="card-lg" style={{ overflow: 'hidden' }}>
+            <button
+              onClick={() => setShowDoc(!showDoc)}
+              style={{ width: '100%', padding: '1.125rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}
+            >
+              Original Document
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showDoc ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }}>
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+            <AnimatePresence>
+              {showDoc && (
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ borderTop: '1px solid var(--border-soft)', overflow: 'hidden' }}>
+                  {image && <img src={image} alt="Original" style={{ width: '100%', maxHeight: 380, objectFit: 'contain', background: '#f0ede8', display: 'block' }} />}
+                  {ocrText && <pre style={{ padding: '1rem', fontSize: 12, color: 'var(--ink-muted)', whiteSpace: 'pre-wrap', maxHeight: 200, overflowY: 'auto', margin: 0 }}>{ocrText}</pre>}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  )
+}
+
+/* ════════════════════════════════════════
    APP PAGE (main export)
 ════════════════════════════════════════ */
 export default function AppPage() {
   const { language, setLanguage, result, processingStep, history, initModel, llmStatus, loadProgress, loadStatus, reset } = useDocument()
   const [chatOpen, setChatOpen] = useState(false)
+  const [historyDoc, setHistoryDoc] = useState(null)   // doc opened from history
   const [searchParams] = useSearchParams()
   const initialScanMode = searchParams.get('mode') === 'scan'
 
@@ -840,6 +1035,7 @@ export default function AppPage() {
 
   function handleReset() {
     reset()
+    setHistoryDoc(null)
   }
 
   return (
@@ -849,6 +1045,7 @@ export default function AppPage() {
         setLanguage={setLanguage}
         onAIClick={() => setChatOpen(true)}
         historyCount={history.length}
+        onViewDoc={(doc) => { setHistoryDoc(doc); reset() }}
       />
 
       <ModelBanner
@@ -860,7 +1057,11 @@ export default function AppPage() {
 
       <main style={{ flex: 1 }}>
         <AnimatePresence mode="wait">
-          {isProcessing ? (
+          {historyDoc ? (
+            <motion.div key="history-detail" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <HistoryResultView doc={historyDoc} onBack={() => setHistoryDoc(null)} />
+            </motion.div>
+          ) : isProcessing ? (
             <motion.div key="processing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <ProcessingView />
             </motion.div>
