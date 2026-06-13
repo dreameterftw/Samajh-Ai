@@ -1,19 +1,5 @@
 import { useRef, useState } from 'react'
 
-// Language codes for Tesseract
-// eng = English, hin = Hindi, tam = Tamil, tel = Telugu, 
-// mal = Malayalam, kan = Kannada, ben = Bengali, mar = Marathi
-const LANG_MAP = {
-  english: 'eng',
-  hindi: 'hin+eng',
-  tamil: 'tam+eng',
-  telugu: 'tel+eng',
-  malayalam: 'mal+eng',
-  kannada: 'kan+eng',
-  bengali: 'ben+eng',
-  marathi: 'mar+eng',
-}
-
 let tesseractPromise = null
 
 async function loadTesseract() {
@@ -23,9 +9,7 @@ async function loadTesseract() {
   tesseractPromise = new Promise((resolve, reject) => {
     const script = document.createElement('script')
     script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'
-    script.onload = () => {
-      resolve(window.Tesseract)
-    }
+    script.onload = () => resolve(window.Tesseract)
     script.onerror = reject
     document.head.appendChild(script)
   })
@@ -38,13 +22,17 @@ export function useOCR() {
   const [status, setStatus] = useState(null) // 'loading' | 'running' | 'done' | 'error'
   const workerRef = useRef(null)
 
-  async function runOCR(imageDataUrl, language = 'hindi') {
+  /**
+   * @param {string} imageDataUrl
+   * @param {string} langCode  — tesseract language code e.g. 'hin+eng', 'eng', 'tam+eng'
+   *                             Comes from languages.js langConfig.tesseract
+   */
+  async function runOCR(imageDataUrl, langCode = 'hin+eng') {
     setStatus('loading')
     setProgress(0)
 
     try {
       const Tesseract = await loadTesseract()
-      const langCode = LANG_MAP[language] ?? 'hin+eng'
 
       const worker = await Tesseract.createWorker(langCode, 1, {
         logger: (m) => {
@@ -54,7 +42,6 @@ export function useOCR() {
             setStatus('loading')
           }
         },
-        // Use CDN for language data — no local hosting needed
         langPath: 'https://tessdata.projectnaptha.com/4.0.0',
       })
 
@@ -70,7 +57,7 @@ export function useOCR() {
       return {
         text: result.data.text,
         confidence: result.data.confidence,
-        words: result.data.words, // useful for layout analysis
+        words: result.data.words,
       }
     } catch (err) {
       setStatus('error')

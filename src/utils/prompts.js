@@ -1,3 +1,5 @@
+import { getLang } from '../data/languages'
+
 const BASE_INSTRUCTION = `You are Samajh, a helpful assistant that explains Indian government documents to ordinary citizens in simple, clear language. 
 The user may have low literacy. Use very short sentences. Avoid jargon.
 Always respond in this exact JSON format and nothing else:
@@ -27,23 +29,14 @@ const TYPE_HINTS = {
   general_document: `This is a government document. Explain clearly what it is about and what the person needs to do.`,
 }
 
-export function buildPrompt(extractedText, docType, outputLanguage) {
-  const langInstruction = outputLanguage === 'english'
-    ? 'Respond in English.'
-    : outputLanguage === 'hindi'
-    ? 'Respond in Hindi (Devanagari script).'
-    : outputLanguage === 'tamil'
-    ? 'Respond in Tamil script.'
-    : outputLanguage === 'telugu'
-    ? 'Respond in Telugu script.'
-    : 'Respond in Hindi.'
-
+export function buildPrompt(extractedText, docType, languageKey) {
+  const lang = getLang(languageKey)
   const typeHint = TYPE_HINTS[docType] ?? TYPE_HINTS.general_document
 
   return `${BASE_INSTRUCTION}
 
 ${typeHint}
-${langInstruction}
+${lang.promptLang}
 
 Here is the document text extracted via OCR:
 ---

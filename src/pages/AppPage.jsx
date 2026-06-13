@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useDocument, LANGUAGES } from '../context/DocumentContext'
+import { useDocument } from '../context/DocumentContext'
+import { LANGUAGES } from '../data/languages'
 import { DOC_TYPE_LABELS } from '../utils/docClassifier'
 import { getRiskLevel, getRiskLabel, formatDate } from '../utils/formatter'
 import { GLOSSARY } from '../data/glossary'
@@ -57,18 +58,19 @@ function AppNavbar({ language, setLanguage, onAIClick, historyCount }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {LANGUAGES.map(lang => (
             <button
-              key={lang.id}
-              onClick={() => setLanguage(lang.id)}
+              key={lang.key}
+              onClick={() => setLanguage(lang.key)}
+              title={lang.full}
               style={{
                 padding: '4px 10px', borderRadius: 9999,
                 fontSize: 12, fontWeight: 600,
-                border: language === lang.id ? '1.5px solid var(--brand-soft)' : '1.5px solid transparent',
-                background: language === lang.id ? 'var(--brand-pale)' : 'transparent',
-                color: language === lang.id ? 'var(--brand)' : 'var(--ink-muted)',
+                border: language === lang.key ? '1.5px solid var(--brand-soft)' : '1.5px solid transparent',
+                background: language === lang.key ? 'var(--brand-pale)' : 'transparent',
+                color: language === lang.key ? 'var(--brand)' : 'var(--ink-muted)',
                 cursor: 'pointer', transition: 'all 0.15s',
               }}
             >
-              {lang.label} {lang.name}
+              {lang.label} {lang.full}
             </button>
           ))}
         </div>
@@ -469,10 +471,27 @@ function AnnotatedText({ text }) {
    RESULTS VIEW
 ════════════════════════════════════════ */
 function ResultsView({ onReset }) {
-  const { result, redFlags, docType, image, ocrText, language } = useDocument()
-  const { speak, speaking, supported } = useSpeech()
+  const { result, redFlags, docType, image, ocrText, language, langConfig } = useDocument()
+  const { speak, stop, speaking, supported } = useSpeech()
   const [checkState, setCheckState] = useState({})
   const [showDoc, setShowDoc] = useState(false)
+  const [hasGoogleVoice, setHasGoogleVoice] = useState(true)
+
+  // Check voice quality once on mount
+  useEffect(() => {
+    function checkVoices() {
+      const voices = window.speechSynthesis?.getVoices() ?? []
+      if (voices.length === 0) return // not loaded yet
+      const langPrefix = langConfig.ttsLang.split('-')[0]
+      const hasGoogle = voices.some(v =>
+        v.lang.startsWith(langPrefix) && v.name.toLowerCase().includes('google')
+      )
+      setHasGoogleVoice(hasGoogle)
+    }
+    checkVoices()
+    window.speechSynthesis?.addEventListener('voiceschanged', checkVoices)
+    return () => window.speechSynthesis?.removeEventListener('voiceschanged', checkVoices)
+  }, [langConfig])
 
   if (!result) {
     return (
@@ -513,27 +532,34 @@ function ResultsView({ onReset }) {
           Analyze another document
         </button>
         {supported && (
-          <button
-            onClick={() => speak(audioText, language)}
-            className={`btn btn-sm ${speaking ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ gap: 6 }}
-          >
-            {speaking ? (
-              <>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" />
-                </svg>
-                Stop
-              </>
-            ) : (
-              <>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-                </svg>
-                Read Aloud
-              </>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+            <button
+              onClick={() => speak(audioText, langConfig)}
+              className={`btn btn-sm ${speaking ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ gap: 6 }}
+            >
+              {speaking ? (
+                <>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" />
+                  </svg>
+                  Stop
+                </>
+              ) : (
+                <>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                  </svg>
+                  Read Aloud ({langConfig.full})
+                </>
+              )}
+            </button>
+            {!hasGoogleVoice && (
+              <p style={{ fontSize: 11, color: 'var(--ink-muted)', textAlign: 'right' }}>
+                💡 Install Google Text-to-Speech for better voice quality
+              </p>
             )}
-          </button>
+          </div>
         )}
       </div>
 
