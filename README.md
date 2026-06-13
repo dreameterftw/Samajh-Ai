@@ -84,11 +84,13 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ---
 
-## Privacy
+## Privacy & Architecture
+
+The core AI features — OCR via Tesseract.js and document explanation via Gemma 2 2B through WebLLM — run entirely inside the user's browser using WebAssembly. Cloudflare Pages is used only to serve static HTML/JS/CSS files, identical to any web host. No document data, no AI inference, and no user information ever reaches any server. The app works fully offline after the first model download.
 
 - No server, no backend, no analytics
 - Documents never leave your device
-- Model runs locally via WebAssembly
+- OCR and LLM inference run locally via WebAssembly
 - History stored only in your browser's IndexedDB
 - Delete all data anytime from Settings
 
