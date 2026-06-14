@@ -6,7 +6,7 @@ Samajh AI is a privacy-first, offline web app that helps Indian citizens underst
 
 > _"Upload. Understand. Act. Stress less."_
 
----
+--- 
 
 ## Features
 
